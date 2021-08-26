@@ -19,11 +19,12 @@ var (
 )
 
 type consoleParam struct {
-	outputFile string
-	inputFile  string
-	csvFile    string
-	verbose    bool
-	dumpAll    bool
+	outputFile   string
+	inputFile    string
+	csvFile      string
+	verbose      bool
+	dumpAll      bool
+	showProgress bool
 }
 
 func parseConsoleParam() (*consoleParam, error) {
@@ -32,6 +33,7 @@ func parseConsoleParam() (*consoleParam, error) {
 	flag.StringVar(&param.outputFile, "output-file", "./output.mpg", "output mpg file")
 	flag.StringVar(&param.csvFile, "csv-file", "./output.csv", "output csv file")
 	flag.BoolVar(&param.dumpAll, "dump-all", false, "dump all rtp info")
+	flag.BoolVar(&param.showProgress, "show-progress", false, "show progress bar")
 	flag.BoolVar(&param.verbose, "verbose", false, "log verbose")
 	flag.Parse()
 	if param.inputFile == "" {
@@ -240,6 +242,9 @@ func (decoder *RTPDecoder) saveRTPInfo(rtp *RTP) error {
 func (decoder *RTPDecoder) decodePkts() error {
 	br := decoder.br
 	for decoder.getPos() < int64(decoder.fileSize) {
+		if decoder.param.showProgress {
+			fmt.Printf("\tparsing... %d/%d %d%%\r", decoder.getPos(), decoder.fileSize, (decoder.getPos()*100)/int64(decoder.fileSize))
+		}
 		rtpLen, err := br.Read32(16)
 		if err != nil {
 			log.Println(err)
