@@ -5,6 +5,7 @@ import (
 	"dumpPayloadFromRTP/bitreader"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -20,13 +21,17 @@ var (
 type consoleParam struct {
 	outputFile string
 	inputFile  string
+	csvFile    string
 	verbose    bool
+	dumpAll    bool
 }
 
 func parseConsoleParam() (*consoleParam, error) {
 	param := &consoleParam{}
 	flag.StringVar(&param.inputFile, "file", "", "input file")
 	flag.StringVar(&param.outputFile, "output-file", "./output.mpg", "output mpg file")
+	flag.StringVar(&param.csvFile, "csv-file", "./output.csv", "output csv file")
+	flag.BoolVar(&param.dumpAll, "dump-all", false, "dump all rtp info")
 	flag.BoolVar(&param.verbose, "verbose", false, "log verbose")
 	flag.Parse()
 	if param.inputFile == "" {
@@ -37,23 +42,28 @@ func parseConsoleParam() (*consoleParam, error) {
 }
 
 type RTPDecoder struct {
-	param      *consoleParam
-	fileBuf    *[]byte
-	fileSize   int
-	br         bitreader.BitReader
-	inputFile  *os.File
-	outputFile *os.File
-	streamSSRC uint32
-	streamPT   uint32
-	lastSeqNum uint32
+	param          *consoleParam
+	fileBuf        *[]byte
+	fileSize       int
+	br             bitreader.BitReader
+	inputFile      *os.File
+	outputFile     *os.File
+	csvFile        *os.File
+	streamSSRC     uint32
+	streamPT       uint32
+	firstSeqNum    uint32
+	lastSeqNum     uint32
+	pktCount       uint32
+	writeCsvHeader bool
 }
 
 func NewRTPDecoder(br bitreader.BitReader, fileBuf *[]byte, fileSize int, param *consoleParam) *RTPDecoder {
 	decoder := &RTPDecoder{
-		fileBuf:  fileBuf,
-		fileSize: fileSize,
-		param:    param,
-		br:       br,
+		fileBuf:        fileBuf,
+		fileSize:       fileSize,
+		param:          param,
+		br:             br,
+		writeCsvHeader: true,
 	}
 	return decoder
 }
@@ -66,6 +76,11 @@ func (decoder *RTPDecoder) openFiles() error {
 		return err
 	}
 	decoder.outputFile, err = os.OpenFile(decoder.param.outputFile, os.O_WRONLY|os.O_CREATE, 0666)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	decoder.csvFile, err = os.OpenFile(decoder.param.csvFile, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -100,6 +115,7 @@ type RTP struct {
 	// 特约信源(CSRC)标识符：每个CSRC标识符占32位，可以有0～15个。每个CSRC标识了包含在该RTP报文有效载荷中的所有特约信源。
 	CSRC   []uint32
 	hdrLen uint32
+	rtpLen uint32
 }
 
 func (decoder *RTPDecoder) decodePkt() *RTP {
@@ -168,6 +184,7 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 		log.Println("ssrc:", rtp.seqNum)
 	}
 	if decoder.lastSeqNum == 0 {
+		decoder.firstSeqNum = rtp.seqNum
 		decoder.lastSeqNum = rtp.seqNum
 	} else if decoder.lastSeqNum+1 != rtp.seqNum {
 		log.Println("check seqNum error, last:", decoder.lastSeqNum, "current:", rtp.seqNum)
@@ -196,6 +213,29 @@ func (decoder *RTPDecoder) saveRTPPayload(payloadLen uint32) error {
 	return nil
 }
 
+func (decoder *RTPDecoder) saveRTPInfo(rtp *RTP) error {
+	if decoder.csvFile == nil {
+		log.Println("check csv file err")
+		return ErrCheckOutputFile
+	}
+	if decoder.writeCsvHeader {
+		header := "P, X, CC, M, PT, SeqNum, timestamp, SSRC, RTPLen\n"
+		if _, err := decoder.csvFile.Write([]byte(header)); err != nil {
+			log.Println(err)
+			return err
+		}
+		decoder.writeCsvHeader = false
+	}
+	data := fmt.Sprintf("%d, %d, %d, %d, %d, %d, %d, %d, %d\n", rtp.P, rtp.X, rtp.CC, rtp.M, rtp.PT,
+		rtp.seqNum, rtp.timestamp, rtp.SSRC, rtp.rtpLen)
+	if _, err := decoder.csvFile.Write([]byte(data)); err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
+
+}
+
 func (decoder *RTPDecoder) decodePkts() error {
 	br := decoder.br
 	for decoder.getPos() < int64(decoder.fileSize) {
@@ -209,6 +249,11 @@ func (decoder *RTPDecoder) decodePkts() error {
 			decoder.skipInvalidBytes(rtpLen - rtp.hdrLen)
 			continue
 		}
+		rtp.rtpLen = rtpLen
+		if err := decoder.saveRTPInfo(rtp); err != nil {
+			return err
+		}
+		decoder.pktCount++
 		if err := decoder.saveRTPPayload(rtpLen - rtp.hdrLen); err != nil {
 			return err
 		}
@@ -220,6 +265,9 @@ func (decoder *RTPDecoder) decodePkts() error {
 func (decoder *RTPDecoder) dumpStream() {
 	log.Println("ssrc:", decoder.streamSSRC)
 	log.Println("pt:", decoder.streamPT)
+	log.Println("first seq num:", decoder.firstSeqNum)
+	log.Println("last seq num:", decoder.lastSeqNum)
+	log.Println("pkt count:", decoder.pktCount)
 }
 
 func main() {
