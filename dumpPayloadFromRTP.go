@@ -217,6 +217,11 @@ func (decoder *RTPDecoder) decodePkts() error {
 	return nil
 }
 
+func (decoder *RTPDecoder) dumpStream() {
+	log.Println("ssrc:", decoder.streamSSRC)
+	log.Println("pt:", decoder.streamPT)
+}
+
 func main() {
 	log.SetFlags(log.Lshortfile)
 	param, err := parseConsoleParam()
@@ -238,4 +243,5 @@ func main() {
 		log.Println(err)
 		return
 	}
+	decoder.dumpStream()
 }
