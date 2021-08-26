@@ -11,6 +11,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 )
 
 var (
@@ -33,8 +34,8 @@ type consoleParam struct {
 func parseConsoleParam() (*consoleParam, error) {
 	param := &consoleParam{}
 	flag.StringVar(&param.inputFile, "file", "", "input file")
-	flag.StringVar(&param.outputFile, "output-file", "./output.mpg", "output mpg file")
-	flag.StringVar(&param.csvFile, "csv-file", "./output.csv", "output csv file")
+	flag.StringVar(&param.outputFile, "output-file", "", "output mpg file")
+	flag.StringVar(&param.csvFile, "csv-file", "", "output csv file")
 	flag.StringVar(&param.remoteAddr, "remote-addr", "", "remote ip:port")
 	flag.BoolVar(&param.dumpAll, "dump-all", false, "dump all rtp info")
 	flag.BoolVar(&param.showProgress, "show-progress", false, "show progress bar")
@@ -92,15 +93,19 @@ func (decoder *RTPDecoder) openFiles() error {
 		log.Println(err)
 		return err
 	}
-	decoder.outputFile, err = os.OpenFile(decoder.param.outputFile, os.O_WRONLY|os.O_CREATE, 0666)
-	if err != nil {
-		log.Println(err)
-		return err
+	if decoder.param.outputFile != "" {
+		decoder.outputFile, err = os.OpenFile(decoder.param.outputFile, os.O_WRONLY|os.O_CREATE, 0666)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
 	}
-	decoder.csvFile, err = os.OpenFile(decoder.param.csvFile, os.O_WRONLY|os.O_CREATE, 0666)
-	if err != nil {
-		log.Println(err)
-		return err
+	if decoder.param.csvFile != "" {
+		decoder.csvFile, err = os.OpenFile(decoder.param.csvFile, os.O_WRONLY|os.O_CREATE, 0666)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
 	}
 	return nil
 }
@@ -173,11 +178,12 @@ func (decoder *RTPDecoder) decodePkt() *RTP {
 	return rtp
 }
 
-func (decoder *RTPDecoder) skipInvalidBytes(skipLen uint32) error {
+func (decoder *RTPDecoder) skipInvalidBytes(rtp *RTP) error {
 	br := decoder.br
+	skipLen := rtp.rtpLen - rtp.hdrLen
 	skipBuf := make([]byte, skipLen)
 	if _, err := io.ReadAtLeast(br, skipBuf, int(skipLen)); err != nil {
-		log.Println(err)
+		log.Println(err, skipLen)
 		return err
 	}
 	return nil
@@ -219,12 +225,13 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 	return true
 }
 
-func (decoder *RTPDecoder) saveRTPPayload(payloadLen uint32) error {
+func (decoder *RTPDecoder) saveRTPPayload(rtp *RTP) error {
 	if decoder.outputFile == nil {
 		//log.Println("check outputfile err")
 		return nil
 	}
 	br := decoder.br
+	payloadLen := rtp.rtpLen - rtp.hdrLen
 	payloadData := make([]byte, payloadLen)
 	if _, err := io.ReadAtLeast(br, payloadData, int(payloadLen)); err != nil {
 		log.Println(err)
@@ -271,10 +278,19 @@ func (decoder *RTPDecoder) sendRTP(rtp *RTP) error {
 	start := uint32(curPos) - rtp.hdrLen - 2
 	end := start + rtp.rtpLen
 	data := (*decoder.fileBuf)[start:end]
+	log.Println(start, end)
 	if _, err := decoder.conn.Write(data); err != nil {
 		log.Println(err)
 		return ErrSendRTP
 	}
+	// 移动buf指针
+	payloadLen := rtp.rtpLen - rtp.hdrLen
+	payloadData := make([]byte, payloadLen)
+	if _, err := io.ReadAtLeast(decoder.br, payloadData, int(payloadLen)); err != nil {
+		log.Println(err)
+		return err
+	}
+	time.Sleep(200 * time.Millisecond)
 	return nil
 }
 
@@ -285,13 +301,13 @@ func (decoder *RTPDecoder) decodePkts() error {
 		}
 		rtp := decoder.decodePkt()
 		if !decoder.isRTPValid(rtp) {
-			decoder.skipInvalidBytes(rtp.rtpLen - rtp.hdrLen)
+			decoder.skipInvalidBytes(rtp)
 			continue
 		}
 		if err := decoder.saveRTPInfo(rtp); err != nil {
 			return err
 		}
-		if err := decoder.saveRTPPayload(rtp.rtpLen - rtp.hdrLen); err != nil {
+		if err := decoder.saveRTPPayload(rtp); err != nil {
 			return err
 		}
 		if err := decoder.sendRTP(rtp); err != nil {
