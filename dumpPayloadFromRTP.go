@@ -323,6 +323,9 @@ func main() {
 	log.Println(param.inputFile, "file size:", len(fileBuf))
 	br := bitreader.NewReader(bytes.NewReader(fileBuf))
 	decoder := NewRTPDecoder(br, &fileBuf, len(fileBuf), param)
+	if decoder == nil {
+		return
+	}
 	if err := decoder.openFiles(); err != nil {
 		return
 	}
