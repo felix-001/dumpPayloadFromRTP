@@ -35,7 +35,7 @@ func parseConsoleParam() (*consoleParam, error) {
 	flag.StringVar(&param.inputFile, "file", "", "input file")
 	flag.StringVar(&param.outputFile, "output-file", "./output.mpg", "output mpg file")
 	flag.StringVar(&param.csvFile, "csv-file", "./output.csv", "output csv file")
-	flag.StringVar(&param.remoteAddr, "remote-addr", "127.0.0.1:9001", "remote ip:port")
+	flag.StringVar(&param.remoteAddr, "remote-addr", "", "remote ip:port")
 	flag.BoolVar(&param.dumpAll, "dump-all", false, "dump all rtp info")
 	flag.BoolVar(&param.showProgress, "show-progress", false, "show progress bar")
 	flag.BoolVar(&param.verbose, "verbose", false, "log verbose")
