@@ -276,9 +276,8 @@ func (decoder *RTPDecoder) sendRTP(rtp *RTP) error {
 	// 调用这个函数时rtp已经解析完了，buf位置已经动了
 	// 2个字节为rtp长度本身
 	start := uint32(curPos) - rtp.hdrLen - 2
-	end := start + rtp.rtpLen
+	end := start + rtp.rtpLen + 2
 	data := (*decoder.fileBuf)[start:end]
-	log.Println(start, end)
 	if _, err := decoder.conn.Write(data); err != nil {
 		log.Println(err)
 		return ErrSendRTP
