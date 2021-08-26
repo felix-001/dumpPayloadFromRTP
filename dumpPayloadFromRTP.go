@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"os"
 )
 
@@ -16,12 +17,14 @@ var (
 	ErrCheckInputFile  = errors.New("check input file error")
 	ErrCheckOutputFile = errors.New("check output file error")
 	ErrCheckRTP        = errors.New("check rtp error")
+	ErrSendRTP         = errors.New("send rtp error")
 )
 
 type consoleParam struct {
 	outputFile   string
 	inputFile    string
 	csvFile      string
+	remoteAddr   string
 	verbose      bool
 	dumpAll      bool
 	showProgress bool
@@ -32,6 +35,7 @@ func parseConsoleParam() (*consoleParam, error) {
 	flag.StringVar(&param.inputFile, "file", "", "input file")
 	flag.StringVar(&param.outputFile, "output-file", "./output.mpg", "output mpg file")
 	flag.StringVar(&param.csvFile, "csv-file", "./output.csv", "output csv file")
+	flag.StringVar(&param.remoteAddr, "remote-addr", "127.0.0.1:9001", "remote ip:port")
 	flag.BoolVar(&param.dumpAll, "dump-all", false, "dump all rtp info")
 	flag.BoolVar(&param.showProgress, "show-progress", false, "show progress bar")
 	flag.BoolVar(&param.verbose, "verbose", false, "log verbose")
@@ -57,15 +61,26 @@ type RTPDecoder struct {
 	lastSeqNum     uint32
 	pktCount       uint32
 	writeCsvHeader bool
+	conn           net.Conn
 }
 
 func NewRTPDecoder(br bitreader.BitReader, fileBuf *[]byte, fileSize int, param *consoleParam) *RTPDecoder {
+	var conn net.Conn
+	var err error
+	if param.remoteAddr != "" {
+		conn, err = net.Dial("tcp", param.remoteAddr)
+		if err != nil {
+			log.Println(err)
+			return nil
+		}
+	}
 	decoder := &RTPDecoder{
 		fileBuf:        fileBuf,
 		fileSize:       fileSize,
 		param:          param,
 		br:             br,
 		writeCsvHeader: true,
+		conn:           conn,
 	}
 	return decoder
 }
@@ -121,8 +136,13 @@ type RTP struct {
 }
 
 func (decoder *RTPDecoder) decodePkt() *RTP {
-	start := decoder.getPos()
 	br := decoder.br
+	rtpLen, err := br.Read32(16)
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	start := decoder.getPos()
 	V, _ := br.Read32(2)
 	P, _ := br.Read32(1)
 	X, _ := br.Read32(1)
@@ -147,7 +167,9 @@ func (decoder *RTPDecoder) decodePkt() *RTP {
 		seqNum:    seqNum,
 		timestamp: timestamp,
 		hdrLen:    uint32(end - start),
+		rtpLen:    rtpLen,
 	}
+	decoder.pktCount++
 	return rtp
 }
 
@@ -199,8 +221,8 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 
 func (decoder *RTPDecoder) saveRTPPayload(payloadLen uint32) error {
 	if decoder.outputFile == nil {
-		log.Println("check outputfile err")
-		return ErrCheckOutputFile
+		//log.Println("check outputfile err")
+		return nil
 	}
 	br := decoder.br
 	payloadData := make([]byte, payloadLen)
@@ -218,8 +240,8 @@ func (decoder *RTPDecoder) saveRTPPayload(payloadLen uint32) error {
 
 func (decoder *RTPDecoder) saveRTPInfo(rtp *RTP) error {
 	if decoder.csvFile == nil {
-		log.Println("check csv file err")
-		return ErrCheckOutputFile
+		//log.Println("check csv file err")
+		return nil
 	}
 	if decoder.writeCsvHeader {
 		header := "P, X, CC, M, PT, SeqNum, timestamp, SSRC, RTPLen\n"
@@ -239,31 +261,42 @@ func (decoder *RTPDecoder) saveRTPInfo(rtp *RTP) error {
 
 }
 
+func (decoder *RTPDecoder) sendRTP(rtp *RTP) error {
+	if decoder.conn == nil {
+		return nil
+	}
+	curPos := decoder.getPos()
+	// 调用这个函数时rtp已经解析完了，buf位置已经动了
+	// 2个字节为rtp长度本身
+	start := uint32(curPos) - rtp.hdrLen - 2
+	end := start + rtp.rtpLen
+	data := (*decoder.fileBuf)[start:end]
+	if _, err := decoder.conn.Write(data); err != nil {
+		log.Println(err)
+		return ErrSendRTP
+	}
+	return nil
+}
+
 func (decoder *RTPDecoder) decodePkts() error {
-	br := decoder.br
 	for decoder.getPos() < int64(decoder.fileSize) {
 		if decoder.param.showProgress {
 			fmt.Printf("\tparsing... %d/%d %d%%\r", decoder.getPos(), decoder.fileSize, (decoder.getPos()*100)/int64(decoder.fileSize))
 		}
-		rtpLen, err := br.Read32(16)
-		if err != nil {
-			log.Println(err)
-			return err
-		}
 		rtp := decoder.decodePkt()
 		if !decoder.isRTPValid(rtp) {
-			decoder.skipInvalidBytes(rtpLen - rtp.hdrLen)
+			decoder.skipInvalidBytes(rtp.rtpLen - rtp.hdrLen)
 			continue
 		}
-		rtp.rtpLen = rtpLen
 		if err := decoder.saveRTPInfo(rtp); err != nil {
 			return err
 		}
-		decoder.pktCount++
-		if err := decoder.saveRTPPayload(rtpLen - rtp.hdrLen); err != nil {
+		if err := decoder.saveRTPPayload(rtp.rtpLen - rtp.hdrLen); err != nil {
 			return err
 		}
-
+		if err := decoder.sendRTP(rtp); err != nil {
+			return err
+		}
 	}
 	return nil
 }
