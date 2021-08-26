@@ -188,6 +188,7 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 		decoder.lastSeqNum = rtp.seqNum
 	} else if decoder.lastSeqNum+1 != rtp.seqNum {
 		log.Println("check seqNum error, last:", decoder.lastSeqNum, "current:", rtp.seqNum)
+		decoder.lastSeqNum = rtp.seqNum
 	} else {
 		decoder.lastSeqNum = rtp.seqNum
 	}
