@@ -20,12 +20,14 @@ var (
 type consoleParam struct {
 	outputFile string
 	inputFile  string
+	verbose    bool
 }
 
 func parseConsoleParam() (*consoleParam, error) {
 	param := &consoleParam{}
 	flag.StringVar(&param.inputFile, "file", "", "input file")
 	flag.StringVar(&param.outputFile, "output-file", "./output.mpg", "output mpg file")
+	flag.BoolVar(&param.verbose, "verbose", false, "log verbose")
 	flag.Parse()
 	if param.inputFile == "" {
 		log.Println("must input file")
@@ -161,6 +163,9 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 	} else if rtp.PT != decoder.streamPT {
 		log.Println("check PT error, old:", decoder.streamPT, "current:", rtp.PT)
 		return false
+	}
+	if decoder.param.verbose {
+		log.Println("ssrc:", rtp.seqNum)
 	}
 	if decoder.lastSeqNum == 0 {
 		decoder.lastSeqNum = rtp.seqNum
