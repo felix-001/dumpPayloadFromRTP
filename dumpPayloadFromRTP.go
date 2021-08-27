@@ -296,14 +296,6 @@ func (decoder *RTPDecoder) sendRTP(rtp *RTP) error {
 	return nil
 }
 
-func contain(s1, s2 []byte) bool {
-	for _, b1 := range s1 {
-		for _, b2 := range s2 {
-
-		}
-	}
-}
-
 func (decoder *RTPDecoder) searchBytes(rtp *RTP) error {
 	if decoder.param.searchBytes == "" {
 		return nil
@@ -314,10 +306,27 @@ func (decoder *RTPDecoder) searchBytes(rtp *RTP) error {
 	start := uint32(curPos) - rtp.hdrLen - 2
 	end := start + rtp.rtpLen + 2
 	data := (*decoder.fileBuf)[start:end]
-	bytes, err := hex.DecodeString(decoder.param.searchBytes)
+	sep, err := hex.DecodeString(decoder.param.searchBytes)
 	if err != nil {
 		log.Println("decode hex err")
 		return err
+	}
+	idx := bytes.Index(data, sep)
+	if idx != -1 {
+		t := "unknow"
+		idx = bytes.Index(data, []byte{0x00, 0x00, 0x01, 0xC0})
+		if idx != -1 {
+			t = "audio"
+		}
+		idx = bytes.Index(data, []byte{0x00, 0x00, 0x01, 0xE0})
+		if idx != -1 {
+			t = "video"
+		}
+		log.Println("seqNum:", rtp.seqNum, "timestamp:", rtp.timestamp,
+			"PT:", rtp.PT, "rtplen:", rtp.rtpLen, "firstSeqNum:",
+			decoder.firstSeqNum, "count:", rtp.seqNum-decoder.firstSeqNum,
+			"type:", t)
+		os.Exit(0)
 	}
 	// 移动buf指针
 	payloadLen := rtp.rtpLen - rtp.hdrLen
@@ -326,7 +335,7 @@ func (decoder *RTPDecoder) searchBytes(rtp *RTP) error {
 		log.Println(err)
 		return err
 	}
-	time.Sleep(10 * time.Millisecond)
+	return nil
 }
 
 func (decoder *RTPDecoder) decodePkts() error {
@@ -346,6 +355,9 @@ func (decoder *RTPDecoder) decodePkts() error {
 			return err
 		}
 		if err := decoder.sendRTP(rtp); err != nil {
+			return err
+		}
+		if err := decoder.searchBytes(rtp); err != nil {
 			return err
 		}
 	}
