@@ -1,4 +1,4 @@
-# dumpPayloadFromRTP
+# rtptool
 
 ## 准备
 wireshark抓到mpeg ps over rtp的包，分析 -> 追踪流 -> tcp流 -> 原始数据 -> 另存为，可以把tcp的负载dump出来，都是rtp的包。
@@ -25,5 +25,5 @@ wireshark抓到mpeg ps over rtp的包，分析 -> 追踪流 -> tcp流 -> 原始�
 -  -verbose  
 显示更详细的信息
 
-# todo
+## todo
 改名rtptool
