@@ -29,7 +29,6 @@ type consoleParam struct {
 	remoteAddr   string
 	searchBytes  string
 	verbose      bool
-	dumpAll      bool
 	showProgress bool
 }
 
@@ -40,7 +39,6 @@ func parseConsoleParam() (*consoleParam, error) {
 	flag.StringVar(&param.csvFile, "csv-file", "", "output csv file")
 	flag.StringVar(&param.searchBytes, "search-bytes", "", "search bytes get rtp info")
 	flag.StringVar(&param.remoteAddr, "remote-addr", "", "remote ip:port")
-	flag.BoolVar(&param.dumpAll, "dump-all", false, "dump all rtp info")
 	flag.BoolVar(&param.showProgress, "show-progress", false, "show progress bar")
 	flag.BoolVar(&param.verbose, "verbose", false, "log verbose")
 	flag.Parse()
