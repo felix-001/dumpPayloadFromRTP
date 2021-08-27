@@ -4,7 +4,7 @@
 wireshark抓到mpeg ps over rtp的包，分析 -> 追踪流 -> tcp流 -> 原始数据 -> 另存为，可以把tcp的负载dump出来，都是rtp的包。
 
 ## 说明
-- -csv-fil  
+- -csv-file  
 将每一包的rtp信息保存为csv
 
 - -file  
