@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"dumpPayloadFromRTP/bitreader"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -26,6 +27,7 @@ type consoleParam struct {
 	inputFile    string
 	csvFile      string
 	remoteAddr   string
+	searchBytes  string
 	verbose      bool
 	dumpAll      bool
 	showProgress bool
@@ -36,6 +38,7 @@ func parseConsoleParam() (*consoleParam, error) {
 	flag.StringVar(&param.inputFile, "file", "", "input file")
 	flag.StringVar(&param.outputFile, "output-file", "", "output mpg file")
 	flag.StringVar(&param.csvFile, "csv-file", "", "output csv file")
+	flag.StringVar(&param.searchBytes, "search-bytes", "", "search bytes get rtp info")
 	flag.StringVar(&param.remoteAddr, "remote-addr", "", "remote ip:port")
 	flag.BoolVar(&param.dumpAll, "dump-all", false, "dump all rtp info")
 	flag.BoolVar(&param.showProgress, "show-progress", false, "show progress bar")
@@ -291,6 +294,39 @@ func (decoder *RTPDecoder) sendRTP(rtp *RTP) error {
 	}
 	time.Sleep(10 * time.Millisecond)
 	return nil
+}
+
+func contain(s1, s2 []byte) bool {
+	for _, b1 := range s1 {
+		for _, b2 := range s2 {
+
+		}
+	}
+}
+
+func (decoder *RTPDecoder) searchBytes(rtp *RTP) error {
+	if decoder.param.searchBytes == "" {
+		return nil
+	}
+	curPos := decoder.getPos()
+	// 调用这个函数时rtp已经解析完了，buf位置已经动了
+	// 2个字节为rtp长度本身
+	start := uint32(curPos) - rtp.hdrLen - 2
+	end := start + rtp.rtpLen + 2
+	data := (*decoder.fileBuf)[start:end]
+	bytes, err := hex.DecodeString(decoder.param.searchBytes)
+	if err != nil {
+		log.Println("decode hex err")
+		return err
+	}
+	// 移动buf指针
+	payloadLen := rtp.rtpLen - rtp.hdrLen
+	payloadData := make([]byte, payloadLen)
+	if _, err := io.ReadAtLeast(decoder.br, payloadData, int(payloadLen)); err != nil {
+		log.Println(err)
+		return err
+	}
+	time.Sleep(10 * time.Millisecond)
 }
 
 func (decoder *RTPDecoder) decodePkts() error {
