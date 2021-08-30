@@ -64,6 +64,7 @@ type RTPDecoder struct {
 	pktCount       uint32
 	writeCsvHeader bool
 	conn           net.Conn
+	outputData     []byte
 }
 
 func NewRTPDecoder(br bitreader.BitReader, fileBuf *[]byte, fileSize int, param *consoleParam) *RTPDecoder {
@@ -83,6 +84,7 @@ func NewRTPDecoder(br bitreader.BitReader, fileBuf *[]byte, fileSize int, param 
 		br:             br,
 		writeCsvHeader: true,
 		conn:           conn,
+		outputData:     []byte{},
 	}
 	return decoder
 }
@@ -202,7 +204,8 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 	if decoder.streamSSRC == 0 {
 		decoder.streamSSRC = rtp.SSRC
 	} else if rtp.SSRC != decoder.streamSSRC {
-		log.Println("check SSRC error, old:", decoder.streamSSRC, "current:", rtp.SSRC)
+		log.Println("check SSRC error, old:", decoder.streamSSRC, "current:", rtp.SSRC,
+			"pos:", decoder.getPos(), "pktCount:", decoder.pktCount)
 		return false
 	}
 	if decoder.streamPT == 0 {
@@ -238,11 +241,14 @@ func (decoder *RTPDecoder) saveRTPPayload(rtp *RTP) error {
 		log.Println(err)
 		return err
 	}
-	if _, err := decoder.outputFile.Write(payloadData); err != nil {
-		log.Println(err)
-		return err
-	}
-	decoder.outputFile.Sync()
+	decoder.outputData = append(decoder.outputData, payloadData...)
+	/*
+		if _, err := decoder.outputFile.Write(payloadData); err != nil {
+			log.Println(err)
+			return err
+		}
+		decoder.outputFile.Sync()
+	*/
 	return nil
 }
 
@@ -362,6 +368,17 @@ func (decoder *RTPDecoder) decodePkts() error {
 	return nil
 }
 
+func (decoder *RTPDecoder) save() error {
+	if decoder.outputFile != nil {
+		if _, err := decoder.outputFile.Write(decoder.outputData); err != nil {
+			log.Println(err)
+			return err
+		}
+		decoder.outputFile.Sync()
+	}
+	return nil
+}
+
 func (decoder *RTPDecoder) dumpStream() {
 	log.Println("ssrc:", decoder.streamSSRC)
 	log.Println("pt:", decoder.streamPT)
@@ -394,5 +411,6 @@ func main() {
 		log.Println(err)
 		return
 	}
+	decoder.save()
 	decoder.dumpStream()
 }
