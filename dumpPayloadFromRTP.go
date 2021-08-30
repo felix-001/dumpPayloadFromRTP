@@ -242,13 +242,6 @@ func (decoder *RTPDecoder) saveRTPPayload(rtp *RTP) error {
 		return err
 	}
 	decoder.outputData = append(decoder.outputData, payloadData...)
-	/*
-		if _, err := decoder.outputFile.Write(payloadData); err != nil {
-			log.Println(err)
-			return err
-		}
-		decoder.outputFile.Sync()
-	*/
 	return nil
 }
 
