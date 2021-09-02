@@ -289,7 +289,7 @@ func (decoder *RTPDecoder) sendRTP(rtp *RTP) error {
 		log.Println(err)
 		return err
 	}
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	return nil
 }
 
