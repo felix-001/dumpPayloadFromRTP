@@ -20,6 +20,7 @@ var (
 	ErrCheckOutputFile = errors.New("check output file error")
 	ErrCheckRTP        = errors.New("check rtp error")
 	ErrSendRTP         = errors.New("send rtp error")
+	ErrCheckRtpLen     = errors.New("check rtp len error")
 )
 
 type consoleParam struct {
@@ -181,10 +182,14 @@ func (decoder *RTPDecoder) decodePkt() *RTP {
 
 func (decoder *RTPDecoder) skipInvalidBytes(rtp *RTP) error {
 	br := decoder.br
+	if rtp.rtpLen < rtp.hdrLen {
+		log.Println("check rtp len err, rtplen:", rtp.rtpLen, "hdrlen:", rtp.hdrLen, "pktcount:", decoder.pktCount)
+		return ErrCheckRtpLen
+	}
 	skipLen := rtp.rtpLen - rtp.hdrLen
 	skipBuf := make([]byte, skipLen)
 	if _, err := io.ReadAtLeast(br, skipBuf, int(skipLen)); err != nil {
-		log.Println(err, skipLen)
+		log.Println("skip invalid bytes err:", err, "skip len: ", skipLen, "rtp len:", rtp.rtpLen, "header len:", rtp.hdrLen)
 		return err
 	}
 	return nil
@@ -342,12 +347,14 @@ func (decoder *RTPDecoder) decodePkts() error {
 			fmt.Printf("\tparsing... %d/%d %d%%\r", decoder.getPos(), decoder.fileSize, (decoder.getPos()*100)/int64(decoder.fileSize))
 		}
 		rtp := decoder.decodePkt()
-		if !decoder.isRTPValid(rtp) {
-			decoder.skipInvalidBytes(rtp)
-			continue
-		}
 		if err := decoder.saveRTPInfo(rtp); err != nil {
 			return err
+		}
+		if !decoder.isRTPValid(rtp) {
+			if err := decoder.skipInvalidBytes(rtp); err != nil {
+				return err
+			}
+			continue
 		}
 		if err := decoder.saveRTPPayload(rtp); err != nil {
 			return err
