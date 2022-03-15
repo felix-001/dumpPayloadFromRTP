@@ -199,18 +199,18 @@ func (decoder *RTPDecoder) skipInvalidBytes(rtp *RTP) error {
 
 func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 	if rtp.P == 1 {
-		log.Println("currently don't support decode P")
+		log.Println("currently don't support decode P, pktCount:", decoder.pktCount, "seqNum:", rtp.seqNum)
 		return false
 	}
 	if rtp.X == 1 {
-		log.Println("currently don't support decode X")
+		log.Println("currently don't support decode X, pktCount:", decoder.pktCount, "seqNum:", rtp.seqNum)
 		return false
 	}
 	if decoder.streamSSRC == 0 {
 		decoder.streamSSRC = rtp.SSRC
 	} else if rtp.SSRC != decoder.streamSSRC {
 		log.Println("check SSRC error, old:", decoder.streamSSRC, "current:", rtp.SSRC,
-			"pos:", decoder.getPos(), "pktCount:", decoder.pktCount)
+			"pos:", decoder.getPos(), "pktCount:", decoder.pktCount, "seqNum:", rtp.seqNum)
 		return false
 	}
 	if decoder.streamPT == 0 {
@@ -226,7 +226,7 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 		decoder.firstSeqNum = rtp.seqNum
 		decoder.lastSeqNum = rtp.seqNum
 	} else if decoder.lastSeqNum+1 != rtp.seqNum {
-		log.Println("check seqNum error, last:", decoder.lastSeqNum, "current:", rtp.seqNum)
+		log.Println("check seqNum error, last:", decoder.lastSeqNum, "current:", rtp.seqNum, "pktCount:", decoder.pktCount)
 		decoder.lastSeqNum = rtp.seqNum
 	} else {
 		decoder.lastSeqNum = rtp.seqNum
@@ -235,16 +235,16 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 }
 
 func (decoder *RTPDecoder) saveRTPPayload(rtp *RTP) error {
-	if decoder.outputFile == nil {
-		//log.Println("check outputfile err")
-		return nil
-	}
 	br := decoder.br
 	payloadLen := rtp.rtpLen - rtp.hdrLen
 	payloadData := make([]byte, payloadLen)
 	if _, err := io.ReadAtLeast(br, payloadData, int(payloadLen)); err != nil {
 		log.Println(err)
 		return err
+	}
+	if decoder.outputFile == nil {
+		//log.Println("check outputfile err")
+		return nil
 	}
 	decoder.outputData = append(decoder.outputData, payloadData...)
 	return nil
