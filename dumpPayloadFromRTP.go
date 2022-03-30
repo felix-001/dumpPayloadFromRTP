@@ -20,6 +20,7 @@ var (
 	ErrCheckOutputFile = errors.New("check output file error")
 	ErrCheckRTP        = errors.New("check rtp error")
 	ErrSendRTP         = errors.New("send rtp error")
+	ErrCheckRtpLen     = errors.New("check rtp len error")
 )
 
 type consoleParam struct {
@@ -183,10 +184,14 @@ func (decoder *RTPDecoder) decodePkt() *RTP {
 
 func (decoder *RTPDecoder) skipInvalidBytes(rtp *RTP) error {
 	br := decoder.br
+	if rtp.rtpLen < rtp.hdrLen {
+		log.Println("check rtp len err, rtplen:", rtp.rtpLen, "hdrlen:", rtp.hdrLen, "pktcount:", decoder.pktCount)
+		return ErrCheckRtpLen
+	}
 	skipLen := rtp.rtpLen - rtp.hdrLen
 	skipBuf := make([]byte, skipLen)
 	if _, err := io.ReadAtLeast(br, skipBuf, int(skipLen)); err != nil {
-		log.Println(err, skipLen)
+		log.Println("skip invalid bytes err:", err, "skip len: ", skipLen, "rtp len:", rtp.rtpLen, "header len:", rtp.hdrLen)
 		return err
 	}
 	return nil
@@ -194,18 +199,18 @@ func (decoder *RTPDecoder) skipInvalidBytes(rtp *RTP) error {
 
 func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 	if rtp.P == 1 {
-		log.Println("currently don't support decode P")
+		log.Println("currently don't support decode P, pktCount:", decoder.pktCount, "seqNum:", rtp.seqNum)
 		return false
 	}
 	if rtp.X == 1 {
-		log.Println("currently don't support decode X")
+		log.Println("currently don't support decode X, pktCount:", decoder.pktCount, "seqNum:", rtp.seqNum)
 		return false
 	}
 	if decoder.streamSSRC == 0 {
 		decoder.streamSSRC = rtp.SSRC
 	} else if rtp.SSRC != decoder.streamSSRC {
 		log.Println("check SSRC error, old:", decoder.streamSSRC, "current:", rtp.SSRC,
-			"pos:", decoder.getPos(), "pktCount:", decoder.pktCount)
+			"pos:", decoder.getPos(), "pktCount:", decoder.pktCount, "seqNum:", rtp.seqNum)
 		return false
 	}
 	if decoder.streamPT == 0 {
@@ -231,16 +236,16 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 }
 
 func (decoder *RTPDecoder) saveRTPPayload(rtp *RTP) error {
-	if decoder.outputFile == nil {
-		//log.Println("check outputfile err")
-		return nil
-	}
 	br := decoder.br
 	payloadLen := rtp.rtpLen - rtp.hdrLen
 	payloadData := make([]byte, payloadLen)
 	if _, err := io.ReadAtLeast(br, payloadData, int(payloadLen)); err != nil {
 		log.Println(err)
 		return err
+	}
+	if decoder.outputFile == nil {
+		//log.Println("check outputfile err")
+		return nil
 	}
 	decoder.outputData = append(decoder.outputData, payloadData...)
 	return nil
@@ -342,12 +347,14 @@ func (decoder *RTPDecoder) decodePkts() error {
 			fmt.Printf("\tparsing... %d/%d %d%%\r", decoder.getPos(), decoder.fileSize, (decoder.getPos()*100)/int64(decoder.fileSize))
 		}
 		rtp := decoder.decodePkt()
-		if !decoder.isRTPValid(rtp) {
-			decoder.skipInvalidBytes(rtp)
-			continue
-		}
 		if err := decoder.saveRTPInfo(rtp); err != nil {
 			return err
+		}
+		if !decoder.isRTPValid(rtp) {
+			if err := decoder.skipInvalidBytes(rtp); err != nil {
+				return err
+			}
+			continue
 		}
 		if err := decoder.saveRTPPayload(rtp); err != nil {
 			return err
