@@ -16,3 +16,5 @@
 output.mpg
 output.csv
 output.audio
+*.csv
+*.mpg
