@@ -218,10 +218,11 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 		log.Println("ssrc:", rtp.seqNum)
 	}
 	if decoder.lastSeqNum == 0 {
+		log.Println("first pkt seqNum:", rtp.seqNum)
 		decoder.firstSeqNum = rtp.seqNum
 		decoder.lastSeqNum = rtp.seqNum
 	} else if decoder.lastSeqNum+1 != rtp.seqNum {
-		log.Println("check seqNum error, last:", decoder.lastSeqNum, "current:", rtp.seqNum)
+		log.Println("check seqNum error, last:", decoder.lastSeqNum, "current:", rtp.seqNum, "pktCount:", decoder.pktCount)
 		decoder.lastSeqNum = rtp.seqNum
 	} else {
 		decoder.lastSeqNum = rtp.seqNum
