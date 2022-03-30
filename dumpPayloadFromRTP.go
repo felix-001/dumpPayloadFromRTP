@@ -392,6 +392,7 @@ func main() {
 	log.SetFlags(log.Lshortfile)
 	param, err := parseConsoleParam()
 	if err != nil {
+		flag.PrintDefaults()
 		return
 	}
 	fileBuf, err := ioutil.ReadFile(param.inputFile)
