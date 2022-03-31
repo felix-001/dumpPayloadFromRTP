@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"dumpPayloadFromRTP/bitreader"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -20,6 +21,7 @@ var (
 	ErrCheckOutputFile = errors.New("check output file error")
 	ErrCheckRTP        = errors.New("check rtp error")
 	ErrSendRTP         = errors.New("send rtp error")
+	ErrSendDone        = errors.New("send rtp done")
 	ErrCheckRtpLen     = errors.New("check rtp len error")
 )
 
@@ -31,6 +33,7 @@ type consoleParam struct {
 	searchBytes  string
 	verbose      bool
 	showProgress bool
+	sendRtpCount int
 }
 
 func parseConsoleParam() (*consoleParam, error) {
@@ -42,6 +45,7 @@ func parseConsoleParam() (*consoleParam, error) {
 	flag.StringVar(&param.remoteAddr, "remote-addr", "", "remote ip:port")
 	flag.BoolVar(&param.showProgress, "show-progress", false, "show progress bar")
 	flag.BoolVar(&param.verbose, "verbose", false, "log verbose")
+	flag.IntVar(&param.sendRtpCount, "send-rtp-count", 100, "发送多少个rtp就不发了")
 	flag.Parse()
 	if param.inputFile == "" {
 		log.Println("must input file")
@@ -279,6 +283,9 @@ func (decoder *RTPDecoder) sendRTP(rtp *RTP) error {
 	if decoder.conn == nil {
 		return nil
 	}
+	if decoder.pktCount > uint32(decoder.param.sendRtpCount) {
+		return ErrSendDone
+	}
 	curPos := decoder.getPos()
 	// 调用这个函数时rtp已经解析完了，buf位置已经动了
 	// 2个字节为rtp长度本身
@@ -389,6 +396,23 @@ func (decoder *RTPDecoder) dumpStream() {
 	log.Println("pkt count:", decoder.pktCount)
 }
 
+func (decoder *RTPDecoder) isKey() (bool, error) {
+	br := decoder.br
+	offset, _ := br.Offset()
+	for offset < br.Size()-4 {
+		buf := make([]byte, 4)
+		if _, err := br.ReadAt(buf, offset); err != nil {
+			return false, err
+		}
+		packStartCode := binary.BigEndian.Uint32(buf)
+		if packStartCode == 0x1111 {
+			return true, nil
+		}
+		offset++
+	}
+	return false, nil
+}
+
 func main() {
 	log.SetFlags(log.Lshortfile)
 	param, err := parseConsoleParam()
@@ -412,6 +436,9 @@ func main() {
 	}
 	if err := decoder.decodePkts(); err != nil {
 		log.Println(err)
+		if err == ErrSendDone {
+			time.Sleep(10 * time.Second)
+		}
 		return
 	}
 	decoder.save()
