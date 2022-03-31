@@ -236,16 +236,17 @@ func (decoder *RTPDecoder) isRTPValid(rtp *RTP) bool {
 }
 
 func (decoder *RTPDecoder) saveRTPPayload(rtp *RTP) error {
-	br := decoder.br
-	payloadLen := rtp.rtpLen - rtp.hdrLen
-	payloadData := make([]byte, payloadLen)
-	if _, err := io.ReadAtLeast(br, payloadData, int(payloadLen)); err != nil {
-		log.Println(err)
-		return err
-	}
 	if decoder.outputFile == nil {
 		//log.Println("check outputfile err")
 		return nil
+	}
+	br := decoder.br
+	payloadLen := rtp.rtpLen - rtp.hdrLen
+	payloadData := make([]byte, payloadLen)
+	// TODO io.ReadAtLeast 很多组件都处理了，需要有一个统一的方案
+	if _, err := io.ReadAtLeast(br, payloadData, int(payloadLen)); err != nil {
+		log.Println(err)
+		return err
 	}
 	decoder.outputData = append(decoder.outputData, payloadData...)
 	return nil
