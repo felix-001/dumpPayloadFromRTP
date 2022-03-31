@@ -70,6 +70,8 @@ type RTPDecoder struct {
 	writeCsvHeader bool
 	conn           net.Conn
 	outputData     []byte
+	gotKey         bool
+	psmPos         uint32
 }
 
 func NewRTPDecoder(br bitreader.BitReader, fileBuf *[]byte, fileSize int, param *consoleParam) *RTPDecoder {
@@ -252,6 +254,16 @@ func (decoder *RTPDecoder) saveRTPPayload(rtp *RTP) error {
 		log.Println(err)
 		return err
 	}
+	if !decoder.gotKey {
+		if decoder.isKey(payloadData) {
+			decoder.gotKey = true
+			pos := decoder.getPackPos(payloadData)
+			data := payloadData[pos:]
+			decoder.outputData = append(decoder.outputData, data...)
+			log.Println("payload:", data)
+		}
+		return nil
+	}
 	decoder.outputData = append(decoder.outputData, payloadData...)
 	return nil
 }
@@ -396,21 +408,35 @@ func (decoder *RTPDecoder) dumpStream() {
 	log.Println("pkt count:", decoder.pktCount)
 }
 
-func (decoder *RTPDecoder) isKey() (bool, error) {
-	br := decoder.br
-	offset, _ := br.Offset()
-	for offset < br.Size()-4 {
-		buf := make([]byte, 4)
-		if _, err := br.ReadAt(buf, offset); err != nil {
-			return false, err
-		}
+func (decoder *RTPDecoder) isKey(data []byte) bool {
+	start := 0
+	end := len(data)
+	for start < end-4 {
+		buf := data[start : start+4]
 		packStartCode := binary.BigEndian.Uint32(buf)
-		if packStartCode == 0x1111 {
-			return true, nil
+		if packStartCode == 0x000001bb {
+			log.Println("got psm pos:", start)
+			decoder.psmPos = uint32(start)
+			return true
 		}
-		offset++
+		start++
 	}
-	return false, nil
+	return false
+}
+
+func (decoder *RTPDecoder) getPackPos(data []byte) int {
+	start := 0
+	end := len(data)
+	for start < end-4 {
+		buf := data[start : start+4]
+		packStartCode := binary.BigEndian.Uint32(buf)
+		if packStartCode == 0x000001ba {
+			log.Println("got pack header pos:", start)
+			return start
+		}
+		start++
+	}
+	return -1
 }
 
 func main() {
