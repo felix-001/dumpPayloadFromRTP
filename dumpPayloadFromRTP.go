@@ -34,6 +34,7 @@ type consoleParam struct {
 	verbose      bool
 	showProgress bool
 	sendRtpCount int
+	dumpOneFrame bool
 }
 
 func parseConsoleParam() (*consoleParam, error) {
@@ -46,6 +47,7 @@ func parseConsoleParam() (*consoleParam, error) {
 	flag.BoolVar(&param.showProgress, "show-progress", false, "show progress bar")
 	flag.BoolVar(&param.verbose, "verbose", false, "log verbose")
 	flag.IntVar(&param.sendRtpCount, "send-rtp-count", 100, "发送多少个rtp就不发了")
+	flag.BoolVar(&param.dumpOneFrame, "dump-one-frame", false, "从h264文件摘出第一帧")
 	flag.Parse()
 	if param.inputFile == "" {
 		log.Println("must input file")
@@ -439,6 +441,20 @@ func (decoder *RTPDecoder) getPackPos(data []byte) int {
 	return -1
 }
 
+func (decoder *RTPDecoder) dumpOneFrame() {
+	buf := *decoder.fileBuf
+	start := 4
+	end := len(buf) - 4
+	for start < end {
+		if buf[start] == 0 && buf[start+1] == 0 && buf[start+2] == 0 && buf[start+3] == 1 && buf[start+4] == 0x41 {
+			break
+		}
+		start++
+	}
+	data := buf[:start]
+	decoder.outputData = append(decoder.outputData, data...)
+}
+
 func main() {
 	log.SetFlags(log.Lshortfile)
 	param, err := parseConsoleParam()
@@ -458,6 +474,11 @@ func main() {
 		return
 	}
 	if err := decoder.openFiles(); err != nil {
+		return
+	}
+	if param.dumpOneFrame {
+		decoder.dumpOneFrame()
+		decoder.save()
 		return
 	}
 	if err := decoder.decodePkts(); err != nil {
