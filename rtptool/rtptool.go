@@ -25,15 +25,26 @@ var (
 )
 
 type ConsoleParam struct {
-	OutputFile   string
-	InputFile    string
-	CsvFile      string
-	RemoteAddr   string
-	SearchBytes  string
-	Verbose      bool
-	ShowProgress bool
-	SendRtpCount int
-	DumpOneFrame bool
+	OutputFile        string
+	InputFile         string
+	CsvFile           string
+	RemoteAddr        string
+	SearchBytes       string
+	Verbose           bool
+	ShowProgress      bool
+	SendRtpCount      int
+	DumpOneFrame      bool
+	PsFile            string
+	OutputAudioFile   string
+	OutputVideoFile   string
+	DumpAudio         bool
+	DumpVideo         bool
+	PrintPsHeader     bool
+	PrintSysHeader    bool
+	PrintPsm          bool
+	verbose           bool
+	DumpPesStartBytes bool
+	DumpVideoFrameCnt int
 }
 
 type RTPDecoder struct {
