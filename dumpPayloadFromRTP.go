@@ -298,18 +298,29 @@ func (decoder *RTPDecoder) sendRTP(rtp *RTP) error {
 	if decoder.conn == nil {
 		return nil
 	}
-	if decoder.pktCount > uint32(decoder.param.sendRtpCount) {
-		return ErrSendDone
-	}
 	curPos := decoder.getPos()
 	// 调用这个函数时rtp已经解析完了，buf位置已经动了
 	// 2个字节为rtp长度本身
 	start := uint32(curPos) - rtp.hdrLen - 2
 	end := start + rtp.rtpLen + 2
 	data := (*decoder.fileBuf)[start:end]
-	if _, err := decoder.conn.Write(data); err != nil {
-		log.Println(err)
-		return ErrSendRTP
+	decoder.gotKey = true
+	if decoder.gotKey {
+		if decoder.pktCount > uint32(decoder.param.sendRtpCount) {
+			return ErrSendDone
+		}
+		if _, err := decoder.conn.Write(data); err != nil {
+			log.Println(err)
+			return ErrSendRTP
+		}
+	} else {
+		if decoder.isKey(data) {
+			decoder.gotKey = true
+			if _, err := decoder.conn.Write(data); err != nil {
+				log.Println(err)
+				return ErrSendRTP
+			}
+		}
 	}
 	// 移动buf指针
 	payloadLen := rtp.rtpLen - rtp.hdrLen
