@@ -22,7 +22,7 @@ wireshark抓到mpeg ps over rtp的包，分析 -> 追踪流 -> tcp流 -> 原始�
 - -show-progress  
 显示进度条
 
--  -verbose  
+-  -Verbose  
 显示更详细的信息
 
 ## todo
