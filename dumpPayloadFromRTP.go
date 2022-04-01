@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"time"
 )
 
@@ -453,6 +454,47 @@ func (decoder *RTPDecoder) dumpOneFrame() {
 	}
 	data := buf[:start]
 	decoder.outputData = append(decoder.outputData, data...)
+}
+
+func (decoder *RTPDecoder) pcapToRTPs(input, output string) (string, error) {
+	cmdstr := fmt.Sprintf("tshark -nlr %s -qz \"follow,tcp,raw,0\" | tail -n +7 | sed 's/^\\s\\+//g' | xxd -r -p > %s", input, output)
+	cmd := exec.Command("bash", "-c", cmdstr)
+	b, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("cmd:", cmdstr, "err:", err)
+		return "", err
+	}
+	return string(b), nil
+}
+
+// rtp包转为mpg
+func (decoder *RTPDecoder) rtpsToMPG(input, output string) {
+}
+
+func (decoder *RTPDecoder) decodeOneH264(h264 []byte) {
+
+}
+
+func (decoder *RTPDecoder) dumpFrames(input string) (string, error) {
+	cmdstr := fmt.Sprintf("ffprobe -show_frames -of xml %s", input)
+	cmd := exec.Command("bash", "-c", cmdstr)
+	b, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("cmd:", cmdstr, "err:", err)
+		return "", err
+	}
+	return string(b), nil
+}
+
+func (decoder *RTPDecoder) dumpPackets(input string) (string, error) {
+	cmdstr := fmt.Sprintf("ffprobe -show_packets -show_data -of xml %s", input)
+	cmd := exec.Command("bash", "-c", cmdstr)
+	b, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Println("cmd:", cmdstr, "err:", err)
+		return "", err
+	}
+	return string(b), nil
 }
 
 func main() {
